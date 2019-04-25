@@ -1,4 +1,6 @@
 *.class
 out/
+images/
 .idea
 *.iml
+*.png
