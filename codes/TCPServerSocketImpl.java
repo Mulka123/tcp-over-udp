@@ -1,9 +1,11 @@
 import java.net.DatagramPacket;
+import java.net.InetAddress;
+import java.util.Objects;
 
 public class TCPServerSocketImpl extends TCPServerSocket {
     EnhancedDatagramSocket udp_socket;
     int port;
-    int state = 0;
+    private TCPState state;
     public TCPServerSocketImpl(int port) throws Exception {
         super(port);
         this.port = port;
@@ -11,27 +13,34 @@ public class TCPServerSocketImpl extends TCPServerSocket {
 
     @Override
     public TCPSocket accept() throws Exception {
+        state = TCPState.LISTEN;
+
         udp_socket = new EnhancedDatagramSocket(port);
         byte[] b = new byte[256];
         DatagramPacket syn = new DatagramPacket(b, b.length);
         udp_socket.receive(syn);
-        if(!(new String(syn.getData()).equals("SYN"))){
-            System.println("as");
-            return;
-        }
-        state = 1;
-        b = "SYN-ACK";
+        String s = new String(syn.getData());
+//        if(!Objects.equals(s, "SYN")){
+//            System.out.println("inja");
+//            System.out.println(s.length() + " " + s);
+//            return null;
+//        }
+
+        state = TCPState.SYN_RECEIVED;
+
+        b = "SYN-ACK".getBytes();
         InetAddress address = InetAddress.getByName("127.0.0.1");
         DatagramPacket ack = new DatagramPacket(b, b.length, address, syn.getPort());
         udp_socket.send(ack);
-        state = 2;
-        DatagramPacket ack-syn = new DatagramPacket(b, b.length);
-        udp_socket.receive(ack-syn);
-        if(!(new String(ack-syn.getData()).equals("ACK"))){
-            System.println("aaa");
-            return;
-        }
-        state = 3;
+        DatagramPacket ack_syn = new DatagramPacket(b, b.length);
+        udp_socket.receive(ack_syn);
+        s = new String(ack_syn.getData());
+//        if(!Objects.equals(s, "ACK")){
+//            System.out.println("onja");
+//            System.out.println(new String(syn.getData()));
+//            return null;
+//        }
+        state = TCPState.ESTABLISHED;
         udp_socket.close();
         return null;
     }
