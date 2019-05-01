@@ -16,7 +16,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         this.port = port;
     }
 
-    private TCPPacket receiveInHandshake() throws Exception{
+    private TCPPacket receivePacket() throws Exception {
         byte[] buf = new byte[MAX_PAYLOAD_SIZE];
         DatagramPacket recv_dp = new DatagramPacket(buf, buf.length);
         udp_socket.receive(recv_dp);
@@ -35,7 +35,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         boolean syn_received = false;
         while(!syn_received) {
             try{
-                TCPPacket recv_pkt = receiveInHandshake();
+                TCPPacket recv_pkt = receivePacket();
                 if(recv_pkt.isSYN())
                     syn_received = true;
             } catch (SocketTimeoutException e) {
@@ -47,12 +47,12 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         // send SYN-ACK and expect ACK
         boolean ack_received = false;
         while(!ack_received) {
-            TCPPacket packet = new TCPPacket(false, true, false);
+            TCPPacket packet = new TCPPacket(true, true);
             byte[] buf = packet.toStream();
             DatagramPacket send_dp = new DatagramPacket(buf, buf.length, address, peer_port);
             udp_socket.send(send_dp);
             try {
-                TCPPacket recv_pkt = receiveInHandshake();
+                TCPPacket recv_pkt = receivePacket();
                 if(recv_pkt.isACK())
                     ack_received = true;
             } catch (SocketTimeoutException e) {
@@ -64,12 +64,12 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         state = TCPState.ESTABLISHED;
         System.out.println("Server Established.");
         TCPSocketImpl ret = new TCPSocketImpl("127.0.0.1", peer_port);
-        ret.setUdpSocket(udp_socket);
+        ret.setUdpSocket(udp_socket); //TODO: is correct?
         return ret;
     }
 
     @Override
     public void close() throws Exception {
-        throw new RuntimeException("Not implemented!");
+        //TODO: what to do with udp_socket
     }
 }

@@ -1,3 +1,4 @@
+import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
@@ -6,6 +7,8 @@ public class TCPSocketImpl extends TCPSocket {
     private static final int MAX_PAYLOAD_SIZE = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
     private EnhancedDatagramSocket udp_socket;
     private TCPState state;
+    private int next_sequence_number;
+    private int next_ack_number;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
@@ -25,7 +28,7 @@ public class TCPSocketImpl extends TCPSocket {
         InetAddress address = InetAddress.getByName("127.0.0.1");
 
         // send ACK and expect SYN-ACK
-        TCPPacket packet = new TCPPacket(true, false, false);
+        TCPPacket packet = new TCPPacket(true, false);
         byte[] buf = packet.toStream();
         boolean syn_ack_received = false;
         DatagramPacket dp = new DatagramPacket(buf, buf.length, address, port);
@@ -35,11 +38,9 @@ public class TCPSocketImpl extends TCPSocket {
             state = TCPState.SYN_SENT;
 
             try {
-                TCPPacket recv_pkt = receiveInHandshake();
-                if(recv_pkt.isSYN_ACK()){
+                TCPPacket recv_pkt = receivePacket();
+                if(recv_pkt.isSYN_ACK())
                     syn_ack_received = true;
-
-                }
             } catch (SocketTimeoutException e) {
                 //TODO: limite maximum try? ye counter bezarim vase datagramSocketemon ke tedade try hasho beshmare
                 // age ziad shod kolan timeout bede nasaze socketo?
@@ -48,13 +49,13 @@ public class TCPSocketImpl extends TCPSocket {
         }
 
         // send ACK
-        packet = new TCPPacket(false, false, true);
+        packet = new TCPPacket(false, true);
         buf = packet.toStream();
         dp = new DatagramPacket(buf, buf.length, address, port);
         while(true){ //TODO: condition?
             udp_socket.send(dp);
             try {
-                TCPPacket recv_pkt = this.receiveInHandshake();
+                TCPPacket recv_pkt = this.receivePacket();
                 if(recv_pkt.isSYN_ACK())
                     continue;
             } catch (SocketTimeoutException e) {
@@ -63,15 +64,15 @@ public class TCPSocketImpl extends TCPSocket {
         }
 
         System.out.println("Client Established.");
+        this.next_sequence_number = Utils.randomInRange(50, 200); //havijoori :\
         state = TCPState.ESTABLISHED;
     }
 
-    private TCPPacket receiveInHandshake() throws Exception{
+    private TCPPacket receivePacket() throws Exception {
         byte[] buf = new byte[MAX_PAYLOAD_SIZE];
         DatagramPacket recv_dp = new DatagramPacket(buf, buf.length);
         udp_socket.receive(recv_dp);
-        TCPPacket recv_pkt = TCPPacket.toTCPPacket(recv_dp.getData());
-        return recv_pkt;
+        return TCPPacket.toTCPPacket(recv_dp.getData());
     }
 
     @Override
@@ -81,7 +82,7 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public void receive(String pathToFile) throws Exception {
-        throw new RuntimeException("Not implemented!");
+        byte[] data = "salam".getBytes();
     }
 
     @Override

@@ -5,15 +5,15 @@ import java.net.UnknownHostException;
 
 public class TCPPacket implements Serializable {
     boolean SYN = false; // 1 byte
-    boolean SYN_ACK = false; // 1 byte
     boolean ACK = false; // 1 byte
+    boolean PSH = false; // indicates if this is the last packet of file
 
     //specifies the number assigned to the first byte of data in the current message
-    int seq_number; // 4 bytes
+    int seqNumber; // 4 bytes
 
     //contains the value of the next sequence number that the sender of
     // the segment is expecting to receive, if the ACK control bit is set.
-    int ack_number; // 4 bytes
+    int ackNumber; // 4 bytes
 
     // header contains 11 bytes
 
@@ -23,18 +23,18 @@ public class TCPPacket implements Serializable {
         this.payload = payload;
     }
 
-    public TCPPacket(boolean SYN, boolean SYN_ACK, boolean ACK) {
+    public TCPPacket(boolean SYN, boolean ACK) {
         this.SYN = SYN;
-        this.SYN_ACK = SYN_ACK;
         this.ACK = ACK;
-//        this.payload = "".getBytes();
     }
+
+    public int getSeqNum() { return seqNumber; }
 
     public String getData() { return (payload == null) ? null : new String(payload); }
 
     public boolean isACK() { return ACK; }
     public boolean isSYN() { return SYN; }
-    public boolean isSYN_ACK() { return SYN_ACK; }
+    public boolean isSYN_ACK() { return SYN && ACK; }
 
     public byte[] toStream(){
         byte[] stream = null;
