@@ -17,8 +17,7 @@ public class TCPPacket implements Serializable {
 
     // header contains 11 bytes
 
-    byte[] payload = null; // variable length
-
+    byte[] payload; // variable length
 
     public TCPPacket(byte[] payload) {
         this.payload = payload;
@@ -40,15 +39,13 @@ public class TCPPacket implements Serializable {
     public byte[] toStream(){
         byte[] stream = null;
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
-            ObjectOutput out = null;
-            out = new ObjectOutputStream(bos);
+            ObjectOutput out = new ObjectOutputStream(bos);
             out.writeObject(this);
             out.flush();
             stream = bos.toByteArray();
         } catch (IOException e) {
             e.printStackTrace();
         }
-        // ignore close exception
         return stream;
     }
 
