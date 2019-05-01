@@ -3,40 +3,36 @@ import java.net.InetAddress;
 import java.util.Random;
 
 public class TCPSocketImpl extends TCPSocket {
-    private EnhancedDatagramSocket udp_socket;
-    private TCPState state;
+    EnhancedDatagramSocket udp_socket;
+    InetAddress address;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
         udp_socket = new EnhancedDatagramSocket(8000);
-
-        byte[] buf = "SYN".getBytes();
+        byte[] b = "salam".getBytes();
         InetAddress address = InetAddress.getByName("127.0.0.1");
-        DatagramPacket dp = new DatagramPacket(buf, buf.length, address, 12344);
+        DatagramPacket dp = new DatagramPacket(b, b.length, address, 12344);
         udp_socket.send(dp);
-
-        state = TCPState.SYN_SENT;
-
-        buf = new byte[256];
-        dp = new DatagramPacket(buf, buf.length);
-        udp_socket.receive(dp);
-        String data = new String(dp.getData());
-//        if(!data.equals("SYN-ACK")){
-//            System.out.println("Oops!");
-//            return;
-//        }
-
-        state = TCPState.ESTABLISHED;
-
-        buf = "ACK".getBytes();
-        dp = new DatagramPacket(buf, buf.length, address, 12344);
-        udp_socket.send(dp);
-
         udp_socket.close();
     }
 
     @Override
     public void send(String pathToFile) throws Exception {
+        File f = new File(pathToFile);
+        udp_socket = new EnhancedDatagramSocket(8000);
+        if(f.length()<udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES){
+            TCPPacket tcpp = new TCPPacket(f);
+            address = InetAddress.getByName("127.0.0.1");
+            DatagramPacket dp = new DatagramPacket(tcpp.toStream(), tcpp.length(),address, 12344);
+            udp_socket.setSoTimeout();
+            udp_socket.send(dp);
+            DatagramPacket recdp;
+            while(udp_socket.receive(recdp)){
+
+            }
+        }
+
+        
         throw new RuntimeException("Not implemented!");
     }
 
