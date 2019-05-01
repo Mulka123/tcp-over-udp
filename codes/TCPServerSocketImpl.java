@@ -32,12 +32,12 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         udp_socket = new EnhancedDatagramSocket(port);
         udp_socket.setSoTimeout(5000); //TODO: ?
 
-        boolean syn_recveived = false;
-        while(!syn_recveived) {
+        boolean syn_received = false;
+        while(!syn_received) {
             try{
                 TCPPacket recv_pkt = receiveInHandshake();
                 if(recv_pkt.isSYN())
-                    syn_recveived = true;
+                    syn_received = true;
             } catch (SocketTimeoutException e) {
                 continue;
             }
