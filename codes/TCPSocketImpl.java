@@ -2,6 +2,7 @@ import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
 import java.util.*;
+import java.io.*;
 
 public class TCPSocketImpl extends TCPSocket {
     private static final int MAX_PAYLOAD_SIZE = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
@@ -95,9 +96,59 @@ public class TCPSocketImpl extends TCPSocket {
         udp_socket.send(dp);
     }
 
+    private void resendwindow(List<byte[]> arrays ) throws Exception{
+        InetAddress address = InetAddress.getByName("127.0.0.1");
+        for(int i=0;i<arrays.size();i++){
+            DatagramPacket dp = new DatagramPacket(arrays.get(i), udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES,address, 12344);
+            udp_socket.setSoTimeout(1000);//ms?? eachtime??
+      //      System.out.println(arrays.size());
+            udp_socket.send(dp);  
+        }          
+    }
+
+    private void gobackN(List<byte[]> arrays ) throws Exception{
+        TCPPacket recvpkt;
+        while(true){
+            try{
+                recvpkt = this.receivePacket();
+                break;
+            }
+            catch(SocketTimeoutException sktexp){
+                this.resendwindow(arrays);
+           //     System.out.println("go back");
+            }
+        }    
+    }
+
+    private int sendpacketchunkbychunk(String pathToFile) throws Exception{
+        File file = new File(pathToFile);
+        FileInputStream f = new FileInputStream(file);        
+        byte[] chunk = new byte[udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];        
+        List<byte[]> arrays = new ArrayList<byte[]>();
+        int numofchunk = 0;
+        long chunks = file.length()/udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
+        while(f.read(chunk)>0){
+            TCPPacket tcpp = new TCPPacket(chunk);
+            byte[] bufsnd = tcpp.toStream();
+            arrays.add(bufsnd);            
+            this.resendwindow(arrays);
+            numofchunk++;
+            if(numofchunk%5 == 0){//this.getwindowsize()????
+                this.gobackN(arrays);
+                arrays.clear();    
+            }
+        }
+        if(arrays.size()!=0){
+            this.gobackN(arrays);
+        }
+        return numofchunk;
+    }
+
     @Override
     public void send(String pathToFile) throws Exception {
-        throw new RuntimeException("Not implemented!");
+        
+        udp_socket = new EnhancedDatagramSocket(8112);
+        int numofchunk = sendpacketchunkbychunk(pathToFile);//numofchunk shaiad niaz shod :/
     }
 
     @Override
