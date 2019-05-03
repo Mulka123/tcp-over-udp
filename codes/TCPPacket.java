@@ -2,6 +2,13 @@ import java.io.*;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 
 public class TCPPacket implements Serializable {
     boolean SYN = false; // 1 byte
@@ -19,18 +26,39 @@ public class TCPPacket implements Serializable {
 
     byte[] payload; // variable length
 
+    public TCPPacket(int ackNumber) {
+        this.ackNumber = ackNumber;
+    }
+
+    public static void saveToFile(ArrayList<TCPPacket> packets, String pathToFile) throws IOException {
+
+        for (TCPPacket packet : packets) {
+            Files.write(Paths.get(pathToFile),
+                    packet.getData(), //encode, decode?
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        }
+    }
+
     public TCPPacket(byte[] payload) {
         this.payload = payload;
     }
+
+    public void setAckNumber(int ackNumber) { this.ackNumber = ackNumber; }
+
+    public int getAckNumber() { return ackNumber; }
+
+    public void setSeqNumber(int seqNumber) { this.seqNumber = seqNumber; }
 
     public TCPPacket(boolean SYN, boolean ACK) {
         this.SYN = SYN;
         this.ACK = ACK;
     }
 
+    public boolean isLastPacket() { return PSH; }
+
     public int getSeqNum() { return seqNumber; }
 
-    public String getData() { return (payload == null) ? null : new String(payload); }
+    public byte[] getData() { return payload; }
 
     public boolean isACK() { return ACK; }
     public boolean isSYN() { return SYN; }
@@ -62,4 +90,8 @@ public class TCPPacket implements Serializable {
 
         return stu;
     }
+
+//    public static TCPPacket toACKPacket(int ackNumber) {
+//        return new TCPPacket(ackNumber);
+//    }
 }
