@@ -12,6 +12,9 @@ public class TCPSocketImpl extends TCPSocket {
     private int my_last_ack_number;
     private int expected_sequence_number;
     private InetAddress address;
+    private List<List<Byte[]>> dups = new ArrayList<List<Byte[]>>();
+    private List<Byte[]>received = new ArrayList<Byte[]>();
+
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
@@ -111,7 +114,8 @@ public class TCPSocketImpl extends TCPSocket {
         while(true){
             try{
                 recvpkt = this.receivePacket();
-                return recvpkt.getSeqNumber();
+
+                return recvpkt.getSeqNum();
             }
             catch(SocketTimeoutException sktexp){
                 this.resendwindow(arrays);
@@ -135,8 +139,8 @@ public class TCPSocketImpl extends TCPSocket {
             byte[] bufsnd = tcpp.toStream();
             tmp.add(bufsnd);
             arrays.add(bufsnd);            
-            this.resendwindow(bufsnd);
-            bufsnd.clear();
+            this.resendwindow(tmp);
+            tmp.clear();
             if(arrays.size()>=5){//this.getwindowsize()????
                 int seq = this.gobackN(arrays);
                 arrays.remove(0);//should check seq#?:/
