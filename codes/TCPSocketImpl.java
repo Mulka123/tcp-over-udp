@@ -12,8 +12,10 @@ public class TCPSocketImpl extends TCPSocket {
     private int my_last_ack_number;
     private int expected_sequence_number;
     private InetAddress address;
-    private List<List<Byte[]>> dups = new ArrayList<List<Byte[]>>();
-    private List<Byte[]>received = new ArrayList<Byte[]>();
+    private List<TCPPacket> dups = new ArrayList<TCPPacket>();
+    private List<TCPPacket> received = new ArrayList<TCPPacket>();
+    private List<TCPPacket> sendpkt = new ArrayList<TCPPacket>();
+    int numdup = 1;
 
 
     public TCPSocketImpl(String ip, int port) throws Exception {
@@ -109,13 +111,33 @@ public class TCPSocketImpl extends TCPSocket {
         }          
     }
 
+    private TCPPacket findinchunks(int seqnum){
+        for(int i=0;i<sendpkt.size();i++){
+            if(sendpkt.get(i).getSeqNum() == seqnum + 1){
+                return sendpkt.get(i);
+            }
+        }
+    }
+
     private int gobackN(List<byte[]> arrays ) throws Exception{
         TCPPacket recvpkt;
         while(true){
             try{
                 recvpkt = this.receivePacket();
-
-                return recvpkt.getSeqNum();
+                if(received.size() == 0 || recvpkt.getSeqNum() > received.get(received.size()-1).getSeqNum()){
+                    received.add(recvpkt);
+                }
+                else if(recvpkt.getSeqNum() == received.get(received.size()-1).getSeqNum()){
+                    numdup++;
+                    if(numdup == 3){
+                        TCPPacket losspkt = findinchunks(recvpkt.getSeqNum());
+                        this.sendPacket(losspkt);
+                        numdup = 1;
+                        return 0;
+                    }
+                    return -1;
+                }
+                return 0;
             }
             catch(SocketTimeoutException sktexp){
                 this.resendwindow(arrays);
@@ -131,18 +153,22 @@ public class TCPSocketImpl extends TCPSocket {
         List<byte[]> arrays = new ArrayList<byte[]>();
         List<byte[]> tmp = new ArrayList<byte[]>();
         int numofchunk = 0;
+        int duporpar = 0;
         long chunks = file.length()/udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
         while(f.read(chunk)>0){
-            numofchunk++;
-            TCPPacket tcpp = new TCPPacket(chunk);
-            tcpp.setSeqNumber(numofchunk);
-            byte[] bufsnd = tcpp.toStream();
-            tmp.add(bufsnd);
-            arrays.add(bufsnd);            
-            this.resendwindow(tmp);
-            tmp.clear();
-            if(arrays.size()>=5){//this.getwindowsize()????
-                int seq = this.gobackN(arrays);
+            if(duporpar == 0){
+                numofchunk++;
+                TCPPacket tcpp = new TCPPacket(chunk);
+                tcpp.setSeqNumber(numofchunk);
+                sendpkt.add(tcpp);
+                byte[] bufsnd = tcpp.toStream();
+                tmp.add(bufsnd);
+                arrays.add(bufsnd);            
+                this.resendwindow(tmp);
+                tmp.clear();
+            }
+            if(arrays.size()>=5 || duporpar == -1){//this.getwindowsize()????
+                duporpar = this.gobackN(arrays);
                 arrays.remove(0);//should check seq#?:/
             }
         }
