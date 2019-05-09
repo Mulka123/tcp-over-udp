@@ -14,6 +14,9 @@ public class TCPSocketImpl extends TCPSocket {
     private int my_last_ack_number;
     private int expected_sequence_number;
     private InetAddress address;
+    private List<List<Byte[]>> dups = new ArrayList<List<Byte[]>>();
+    private List<Byte[]>received = new ArrayList<Byte[]>();
+
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
@@ -109,12 +112,13 @@ public class TCPSocketImpl extends TCPSocket {
         }          
     }
 
-    private void gobackN(List<byte[]> arrays ) throws Exception{
+    private int gobackN(List<byte[]> arrays ) throws Exception{
         TCPPacket recvpkt;
         while(true){
             try{
                 recvpkt = this.receivePacket();
-                break;
+
+                return recvpkt.getSeqNum();
             }
             catch(SocketTimeoutException sktexp){
                 this.resendwindow(arrays);
@@ -128,22 +132,22 @@ public class TCPSocketImpl extends TCPSocket {
         FileInputStream f = new FileInputStream(file);        
         byte[] chunk = new byte[udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];        
         List<byte[]> arrays = new ArrayList<byte[]>();
+        List<byte[]> tmp = new ArrayList<byte[]>();
         int numofchunk = 0;
         long chunks = file.length()/udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
         while(f.read(chunk)>0){
-            TCPPacket tcpp = new TCPPacket(chunk);
-            // tcpp = this.createPacket(chunk) //set seq number
-            byte[] bufsnd = tcpp.toStream();
-            arrays.add(bufsnd);            
-            this.resendwindow(arrays);
             numofchunk++;
-            if(numofchunk%5 == 0){//this.getwindowsize()????
-                this.gobackN(arrays);
-                arrays.clear();    
+            TCPPacket tcpp = new TCPPacket(chunk);
+            tcpp.setSeqNumber(numofchunk);
+            byte[] bufsnd = tcpp.toStream();
+            tmp.add(bufsnd);
+            arrays.add(bufsnd);            
+            this.resendwindow(tmp);
+            tmp.clear();
+            if(arrays.size()>=5){//this.getwindowsize()????
+                int seq = this.gobackN(arrays);
+                arrays.remove(0);//should check seq#?:/
             }
-        }
-        if(arrays.size()!=0){
-            this.gobackN(arrays);
         }
         return numofchunk;
     }
@@ -154,7 +158,7 @@ public class TCPSocketImpl extends TCPSocket {
         udp_socket = new EnhancedDatagramSocket(8112);
         int numofchunk = sendpacketchunkbychunk(pathToFile);//numofchunk shaiad niaz shod :/
     }
-
+    
     @Override
     public void receive(String pathToFile) throws Exception {
         ArrayList<TCPPacket> packets = new ArrayList<>();
