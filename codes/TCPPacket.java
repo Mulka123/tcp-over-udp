@@ -1,36 +1,34 @@
 import java.io.*;
-import java.net.DatagramPacket;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 
-public class TCPPacket implements Serializable {
-    boolean SYN = false; // 1 byte
-    boolean ACK = false; // 1 byte
-    boolean PSH = false; // indicates if this is the last packet of file
+class TCPPacket implements Serializable {
+    private boolean SYN = false; // 1 byte
+    private boolean ACK = false; // 1 byte
+    private boolean PSH = false; // indicates if this is the last packet of file
+    private boolean WP = false;  // window probe
 
     //specifies the number assigned to the first byte of data in the current message
-    int seqNumber; // 4 bytes
+    private int seqNumber; // 4 bytes
 
     //contains the value of the next sequence number that the sender of
     // the segment is expecting to receive, if the ACK control bit is set.
-    int ackNumber; // 4 bytes
+    private int ackNumber; // 4 bytes
 
-    // header contains 11 bytes
+    private int rwnd; // receive window size
 
-    byte[] payload; // variable length
+    private byte[] payload; // variable length
 
-    public TCPPacket(int ackNumber) {
+    TCPPacket(int ackNumber, int rwnd) {
         this.ackNumber = ackNumber;
+        this.rwnd = rwnd;
     }
 
-    public static void saveToFile(ArrayList<TCPPacket> packets, String pathToFile) throws IOException {
+    public int getRwndSize() { return rwnd; }
+
+    static void saveToFile(ArrayList<TCPPacket> packets, String pathToFile) throws IOException {
 
         for (TCPPacket packet : packets) {
             Files.write(Paths.get(pathToFile),
@@ -39,32 +37,32 @@ public class TCPPacket implements Serializable {
         }
     }
 
-    public TCPPacket(byte[] payload) {
+    TCPPacket(byte[] payload) {
         this.payload = payload;
     }
 
-    public void setAckNumber(int ackNumber) { this.ackNumber = ackNumber; }
+    void setAckNumber(int ackNumber) { this.ackNumber = ackNumber; }
 
-    public int getAckNumber() { return ackNumber; }
+    int getAckNumber() { return ackNumber; }
 
-    public void setSeqNumber(int seqNumber) { this.seqNumber = seqNumber; }
+    void setSeqNumber(int seqNumber) { this.seqNumber = seqNumber; }
 
-    public TCPPacket(boolean SYN, boolean ACK) {
+    TCPPacket(boolean SYN, boolean ACK) {
         this.SYN = SYN;
         this.ACK = ACK;
     }
 
-    public boolean isLastPacket() { return PSH; }
+    boolean isLastPacket() { return PSH; }
 
-    public int getSeqNum() { return seqNumber; }
+    int getSeqNum() { return seqNumber; }
 
-    public byte[] getData() { return payload; }
+    private byte[] getData() { return payload; }
 
-    public boolean isACK() { return ACK; }
-    public boolean isSYN() { return SYN; }
-    public boolean isSYN_ACK() { return SYN && ACK; }
+    boolean isACK() { return ACK; }
+    boolean isSYN() { return SYN; }
+    boolean isSYN_ACK() { return SYN && ACK; }
 
-    public byte[] toStream(){
+    byte[] toStream(){
         byte[] stream = null;
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
             ObjectOutput out = new ObjectOutputStream(bos);
@@ -77,7 +75,7 @@ public class TCPPacket implements Serializable {
         return stream;
     }
 
-    public static TCPPacket toTCPPacket(byte[] stream) {
+    static TCPPacket toTCPPacket(byte[] stream) {
         TCPPacket stu = null;
 
         try (ByteArrayInputStream bais = new ByteArrayInputStream(stream);

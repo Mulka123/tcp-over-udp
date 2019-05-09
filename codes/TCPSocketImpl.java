@@ -1,3 +1,4 @@
+import java.lang.reflect.Array;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
@@ -6,6 +7,7 @@ import java.io.*;
 
 public class TCPSocketImpl extends TCPSocket {
     private static final int MAX_PAYLOAD_SIZE = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
+    private static final int receive_buffer_size = 1024; // num of available packets at first
     private EnhancedDatagramSocket udp_socket;
     private TCPState state;
     private int my_next_sequence_number;
@@ -100,6 +102,7 @@ public class TCPSocketImpl extends TCPSocket {
         InetAddress address = InetAddress.getByName("127.0.0.1");
         for(int i=0;i<arrays.size();i++){
             DatagramPacket dp = new DatagramPacket(arrays.get(i), udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES,address, 12344);
+            // size balayi elzaman maximum size nis
             udp_socket.setSoTimeout(1000);//ms?? eachtime??
       //      System.out.println(arrays.size());
             udp_socket.send(dp);  
@@ -129,6 +132,7 @@ public class TCPSocketImpl extends TCPSocket {
         long chunks = file.length()/udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
         while(f.read(chunk)>0){
             TCPPacket tcpp = new TCPPacket(chunk);
+            // tcpp = this.createPacket(chunk) //set seq number
             byte[] bufsnd = tcpp.toStream();
             arrays.add(bufsnd);            
             this.resendwindow(arrays);
@@ -154,25 +158,63 @@ public class TCPSocketImpl extends TCPSocket {
     @Override
     public void receive(String pathToFile) throws Exception {
         ArrayList<TCPPacket> packets = new ArrayList<>();
+        ArrayList<TCPPacket> receive_buffer = new ArrayList<>();
 
         while (true) {
-
             TCPPacket recv_pkt = receivePacket();
-            packets.add(recv_pkt);
+//            int sequence_number = recv_pkt.getSeqNum();
 
-            if(recv_pkt.getSeqNum() == expected_sequence_number) {
-                expected_sequence_number = recv_pkt.getSeqNum() + 1;
-                my_last_ack_number = recv_pkt.getSeqNum();
+//            if(sequence_number < expected_sequence_number) {
+//                if(not_received_packets.contains(sequence_number)){
+//                    not_received_packets.remove(sequence_number);
+//                    my_last_ack_number = Math.min(Collections.min(not_received_packets), sequence_number);
+//                }
+//                // else drop packet
+//                continue;
+//            } else if (sequence_number > expected_sequence_number) {
+//                // fast recovery
+//                for (int x = expected_sequence_number; x < sequence_number; ++x) {
+//                    if(!not_received_packets.contains(x))
+//                        not_received_packets.add(x); // alan 2 ro inja add mikone :| ke nabas bokone
+//                }
+//            } else {
+//                expected_sequence_number = sequence_number + 1;
+//                my_last_ack_number = sequence_number;
+//            }
+//
+//            last_received_seq_number = sequence_number;
+
+            Utils.addIfNotExists(receive_buffer, recv_pkt);
+//            receive_buffer.add(recv_pkt);
+
+//            // send ACK
+//            sendACK(my_last_ack_number, receive_buffer_size - receive_buffer.size());
+
+            receive_buffer.sort(Comparator.comparing(TCPPacket::getSeqNum));
+            int inOrderBufferedItems = Utils.findAllInOrderItems(receive_buffer, expected_sequence_number);
+            if(inOrderBufferedItems > 0) {
+                packets.addAll(Utils.extractItemsInRange(receive_buffer, 0, inOrderBufferedItems));
+                my_last_ack_number = receive_buffer.get(inOrderBufferedItems-1).getSeqNum();
+                expected_sequence_number = my_last_ack_number + 1;
+
+                if(recv_pkt.isLastPacket()) //and if we've collected all data before it? and if receive buffer is not empty?
+                    break;
             }
 
             // send ACK
-            sendPacket(new TCPPacket(my_last_ack_number));
+            sendACK(my_last_ack_number, receive_buffer_size - receive_buffer.size());
 
-            if(recv_pkt.isLastPacket())
-                break;
+//            if(recv_pkt.isLastPacket()) //and if we've collected all data before it? and if receive buffer is not empty?
+//                break;
         }
+
         packets.sort(Comparator.comparing(TCPPacket::getSeqNum));
         TCPPacket.saveToFile(packets, pathToFile);
+    }
+
+    private void sendACK(int ack_number, int rwnd) throws Exception {
+        TCPPacket pkt = new TCPPacket(ack_number, rwnd);
+        sendPacket(pkt);
     }
 
     @Override
