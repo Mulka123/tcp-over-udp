@@ -12,15 +12,17 @@ public class TCPServerSocketImpl extends TCPServerSocket {
     public TCPServerSocketImpl(int port) throws Exception {
         super(port);
         this.port = port;
+        this.peer_port = 0;
     }
 
     private TCPPacket receivePacket() throws Exception {
         byte[] buf = new byte[MAX_PAYLOAD_SIZE];
         DatagramPacket recv_dp = new DatagramPacket(buf, buf.length);
         udp_socket.receive(recv_dp);
-        TCPPacket recv_pkt = TCPPacket.toTCPPacket(recv_dp.getData());
-        peer_port = recv_dp.getPort();
-        return recv_pkt;
+        if(peer_port == 0)
+            peer_port = recv_dp.getPort();
+        System.out.println("PEER PORT IS " + peer_port);
+        return TCPPacket.toTCPPacket(recv_dp.getData());
     }
 
     @Override
@@ -29,17 +31,18 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         int my_seq_number = Utils.randomInRange(50, 200); //havijoori :\
         int my_ack_number = 0;
         udp_socket = new EnhancedDatagramSocket(port);
-        udp_socket.setSoTimeout(5000); //TODO: ?
+        udp_socket.setSoTimeout(1000); //TODO: ?
 
         boolean syn_received = false;
         while(!syn_received) {
             try {
                 TCPPacket recv_pkt = receivePacket();
-
                 my_ack_number = recv_pkt.getSeqNum() + 1;
-                if(recv_pkt.isSYN())
+                if(recv_pkt.isSYN()){
                     syn_received = true;
+                }
             } catch (SocketTimeoutException e) {
+                System.out.println("TIMEOUT");
                 continue;
             }
         }
@@ -53,14 +56,16 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         packet.setAckNumber(my_ack_number);
         while(!ack_received) {
             sendPacket(packet);
+
             try {
                 TCPPacket recv_pkt = receivePacket();
                 if(recv_pkt.getAckNumber() != my_seq_number){
                     System.out.println("BAD PACKET IN SV :|");
                     //TODO: what now?
                 }
-                if(recv_pkt.isACK())
+                if(recv_pkt.isACK()){
                     ack_received = true;
+                }
             } catch (SocketTimeoutException e) {
                 //TODO: increment a variable to prevent sticking in while?
                 // age ACK miss shod?! :|

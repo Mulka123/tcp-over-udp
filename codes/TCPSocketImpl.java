@@ -24,6 +24,7 @@ public class TCPSocketImpl extends TCPSocket {
         super(ip, port);
         address = InetAddress.getByName(ip);
         this.peer_port = port;
+        this.port = 8000;
         this.state = TCPState.CLOSED; //TODO: check
     }
 
@@ -38,7 +39,7 @@ public class TCPSocketImpl extends TCPSocket {
     @Override
     public void connect() throws Exception {
         //TODO: check for state! don't connect if already connected
-        udp_socket = new EnhancedDatagramSocket(8000); //TODO: how to choose port?
+        udp_socket = new EnhancedDatagramSocket(port); //TODO: how to choose port?
         udp_socket.setSoTimeout(5000); //TODO: how to set timeout?
 
         my_next_sequence_number = Utils.randomInRange(50, 200); //havijoori :\
@@ -51,10 +52,10 @@ public class TCPSocketImpl extends TCPSocket {
         boolean syn_ack_received = false;
         while(!syn_ack_received) {
             sendPacket(packet);
-
             state = TCPState.SYN_SENT;
             try {
                 TCPPacket recv_pkt = receivePacket();
+
                 synack_seq_num = recv_pkt.getSeqNum();
                 synack_ack_num = recv_pkt.getAckNumber();
                 if(synack_ack_num != my_next_sequence_number) {
@@ -74,13 +75,13 @@ public class TCPSocketImpl extends TCPSocket {
         packet = new TCPPacket(false, true);
         packet.setSeqNumber(my_next_sequence_number++);
         packet.setAckNumber(++synack_seq_num);
-        while(true){ //TODO: condition?
+        while(true) { //TODO: chejori az send shodane ACK mitonim motmaen shim?
             sendPacket(packet);
-
             try {
                 TCPPacket recv_pkt = receivePacket();
-                if(recv_pkt.isSYN_ACK())
+                if(recv_pkt.isSYN_ACK()){
                     continue;
+                }
             } catch (SocketTimeoutException e) {
                 break;
             }
@@ -105,13 +106,13 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void resendwindow(List<byte[]> arrays ) throws Exception{
         InetAddress address = InetAddress.getByName("127.0.0.1");
-        for(int i=0;i<arrays.size();i++){
-            DatagramPacket dp = new DatagramPacket(arrays.get(i), udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES,address, 12344);
+        for (byte[] array : arrays) {
+            DatagramPacket dp = new DatagramPacket(array, udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES, address, peer_port);
             // size balayi elzaman maximum size nis
-            udp_socket.setSoTimeout(1000);//ms?? eachtime??
-      //      System.out.println(arrays.size());
-            udp_socket.send(dp);  
-        }          
+//            udp_socket.setSoTimeout(1000);//ms?? eachtime??
+            //      System.out.println(arrays.size());
+            udp_socket.send(dp);
+        }
     }
 
     private TCPPacket findinchunks(int seqnum){
@@ -120,6 +121,7 @@ public class TCPSocketImpl extends TCPSocket {
                 return sendpkt.get(i);
             }
         }
+        return null;
     }
 
     private int gobackN(List<byte[]> arrays ) throws Exception{
@@ -127,15 +129,16 @@ public class TCPSocketImpl extends TCPSocket {
         while(true){
             try{
                 recvpkt = this.receivePacket();
-                if(received.size() == 0 || recvpkt.getSeqNum() > received.get(received.size()-1).getSeqNum()){
+                int rwnd = recvpkt.getRwndSize();
+                if(received.size() == 0 || recvpkt.getAckNumber() > received.get(received.size()-1).getAckNumber()){
                     received.add(recvpkt);
                 }
-                else if(recvpkt.getSeqNum() == received.get(received.size()-1).getSeqNum()){
+                else if(recvpkt.getAckNumber() == received.get(received.size()-1).getAckNumber()){
                     numdup++;
                     if(numdup == 3){
-                        TCPPacket losspkt = findinchunks(recvpkt.getSeqNum());
+                        TCPPacket losspkt = findinchunks(recvpkt.getAckNumber());
                         this.sendPacket(losspkt);
-                        numdup = 1;
+                        numdup = 0;
                         return 0;
                     }
                     return -1;
@@ -158,7 +161,7 @@ public class TCPSocketImpl extends TCPSocket {
         int numofchunk = 0;
         int duporpar = 0;
         long chunks = file.length()/udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
-        while(f.read(chunk)>0){
+        while(f.read(chunk)>0) {
             if(duporpar == 0){
                 numofchunk++;
                 TCPPacket tcpp = new TCPPacket(chunk);
@@ -180,8 +183,6 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public void send(String pathToFile) throws Exception {
-        
-        udp_socket = new EnhancedDatagramSocket(8112);
         int numofchunk = sendpacketchunkbychunk(pathToFile);//numofchunk shaiad niaz shod :/
     }
     
