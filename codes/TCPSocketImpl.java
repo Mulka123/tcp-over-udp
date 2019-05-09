@@ -10,6 +10,9 @@ public class TCPSocketImpl extends TCPSocket {
     private static final int receive_buffer_size = 1024; // num of available packets at first
     private EnhancedDatagramSocket udp_socket;
     private TCPState state;
+    private CongestionControlState congestionState;
+    private long windowSize;
+    private long SSThreshold;
     private int my_next_sequence_number;
     private int my_last_ack_number;
     private int expected_sequence_number;
@@ -105,9 +108,8 @@ public class TCPSocketImpl extends TCPSocket {
     }
 
     private void resendwindow(List<byte[]> arrays ) throws Exception{
-        InetAddress address = InetAddress.getByName("127.0.0.1");
-        for (byte[] array : arrays) {
-            DatagramPacket dp = new DatagramPacket(array, udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES, address, peer_port);
+        for (byte[] item : arrays) {
+            DatagramPacket dp = new DatagramPacket(item, item.length, address, peer_port);
             // size balayi elzaman maximum size nis
 //            udp_socket.setSoTimeout(1000);//ms?? eachtime??
             //      System.out.println(arrays.size());
@@ -124,18 +126,22 @@ public class TCPSocketImpl extends TCPSocket {
         return null;
     }
 
-    private int gobackN(List<byte[]> arrays ) throws Exception{
+    private int gobackN(List<byte[]> arrays) throws Exception{
         TCPPacket recvpkt;
         while(true){
             try{
                 recvpkt = this.receivePacket();
-                int rwnd = recvpkt.getRwndSize();
+
                 if(received.size() == 0 || recvpkt.getAckNumber() > received.get(received.size()-1).getAckNumber()){
                     received.add(recvpkt);
                 }
                 else if(recvpkt.getAckNumber() == received.get(received.size()-1).getAckNumber()){
                     numdup++;
-                    if(numdup == 3){
+                    if(numdup == 3) {
+
+                        windowSize /= 2;
+                        congestionState = CongestionControlState.FASTRECOVERY;
+
                         TCPPacket losspkt = findinchunks(recvpkt.getAckNumber());
                         this.sendPacket(losspkt);
                         numdup = 0;
@@ -146,34 +152,56 @@ public class TCPSocketImpl extends TCPSocket {
                 return 0;
             }
             catch(SocketTimeoutException sktexp){
-                this.resendwindow(arrays);
+
+                SSThreshold = windowSize / 2;
+                windowSize = 1;
+                congestionState = CongestionControlState.SLOWSTART;
+
+//                byte[] first_pkt = arrays.get(0);
+//                arrays.clear();
+//                sendPacket(new TCPPacket(first_pkt));
+//                arrays.add(first_pkt);
+//                this.resendwindow(arrays);
            //     System.out.println("go back");
             }
         }    
     }
 
-    private int sendpacketchunkbychunk(String pathToFile) throws Exception{
+    private int sendpacketchunkbychunk(String pathToFile) throws Exception {
         File file = new File(pathToFile);
         FileInputStream f = new FileInputStream(file);        
-        byte[] chunk = new byte[udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];        
-        List<byte[]> arrays = new ArrayList<byte[]>();
-        List<byte[]> tmp = new ArrayList<byte[]>();
+        byte[] chunk = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
+        List<byte[]> arrays = new ArrayList<>();
+        List<byte[]> tmp = new ArrayList<>();
         int numofchunk = 0;
         int duporpar = 0;
-        long chunks = file.length()/udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
-        while(f.read(chunk)>0) {
-            if(duporpar == 0){
+//        long chunks = file.length()/udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
+        boolean is_file_read = false;
+        while(!is_file_read) {
+            if(duporpar == 0) {
+                // slow start
                 numofchunk++;
-                TCPPacket tcpp = new TCPPacket(chunk);
-                tcpp.setSeqNumber(numofchunk);
-                sendpkt.add(tcpp);
-                byte[] bufsnd = tcpp.toStream();
-                tmp.add(bufsnd);
-                arrays.add(bufsnd);            
-                this.resendwindow(tmp);
-                tmp.clear();
+                for (int i = SENDBASE; i < windowSize; i++) {
+                    if(i NOT_SENT) {
+
+                        if(f.read(chunk) > 0) {
+                            TCPPacket tcpp = new TCPPacket(chunk);
+                            tcpp.setSeqNumber(numofchunk);
+                            sendpkt.add(tcpp);
+                            byte[] bufsnd = tcpp.toStream();
+                            sendPacket(tcpp);
+//                            tmp.add(bufsnd);
+                            arrays.add(bufsnd);
+//                            this.resendwindow(tmp);
+//                            tmp.clear();
+                        } else{
+                            is_file_read = true;
+                        }
+                    }
+                }
+
             }
-            if(arrays.size()>=5 || duporpar == -1){//this.getwindowsize()????
+            if(arrays.size() >= 5 || duporpar == -1){//this.getwindowsize()????
                 duporpar = this.gobackN(arrays);
                 arrays.remove(0);//should check seq#?:/
             }
@@ -183,6 +211,9 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public void send(String pathToFile) throws Exception {
+        congestionState = CongestionControlState.SLOWSTART;
+        SSThreshold = Integer.MAX_VALUE;
+        windowSize = 1;
         int numofchunk = sendpacketchunkbychunk(pathToFile);//numofchunk shaiad niaz shod :/
     }
     
@@ -255,11 +286,11 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public long getSSThreshold() {
-        throw new RuntimeException("Not implemented!");
+        return SSThreshold;
     }
 
     @Override
     public long getWindowSize() {
-        throw new RuntimeException("Not implemented!");
+        return windowSize;
     }
 }
