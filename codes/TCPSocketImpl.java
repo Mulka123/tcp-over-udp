@@ -20,8 +20,9 @@ public class TCPSocketImpl extends TCPSocket {
     private List<TCPPacket> dups = new ArrayList<TCPPacket>();
     private List<TCPPacket> received = new ArrayList<TCPPacket>();
     private List<TCPPacket> sendpkt = new ArrayList<TCPPacket>();
-    int numdup = 1;
-
+    private int numdup = 1;
+    private int MSS = 10;
+    private int ocwnd = 0;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
@@ -131,23 +132,32 @@ public class TCPSocketImpl extends TCPSocket {
         while(true){
             try{
                 recvpkt = this.receivePacket();
-
                 if(received.size() == 0 || recvpkt.getAckNumber() > received.get(received.size()-1).getAckNumber()){
                     received.add(recvpkt);
+                    return 0;
                 }
                 else if(recvpkt.getAckNumber() == received.get(received.size()-1).getAckNumber()){
                     numdup++;
-                    if(numdup == 3) {
-
-                        windowSize /= 2;
-                        congestionState = CongestionControlState.FASTRECOVERY;
-
+                    if(numdup == 3){
+                        ocwnd = windowSize/2;
+                        SSThreshold = ocwnd;
+                        windowSize = SSThreshold + 3;
                         TCPPacket losspkt = findinchunks(recvpkt.getAckNumber());
                         this.sendPacket(losspkt);
                         numdup = 0;
+                        congestionState = CongestionControlState.FASTRECOVERY;
                         return 0;
                     }
                     return -1;
+                }
+                else if(congestionState == CongestionControlState.FASTRECOVERY){
+                    if(recvpkt.getAckNumber() == received.get(received.size()-1).getAckNumber()){
+                        windowSize ++;
+                    }
+                    else {
+                        windowSize /= 2;
+                        congestionState = CongestionControlState.CONGESTIONAVOIDANCE;
+                    }
                 }
                 return 0;
             }
@@ -199,7 +209,6 @@ public class TCPSocketImpl extends TCPSocket {
                         }
                     }
                 }
-
             }
             if(arrays.size() >= 5 || duporpar == -1){//this.getwindowsize()????
                 duporpar = this.gobackN(arrays);
