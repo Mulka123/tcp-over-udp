@@ -4,5 +4,6 @@ public class Sender {
         tcpSocket.connect();
         tcpSocket.send("1MB.txt");
         tcpSocket.close();
+        tcpSocket.saveCongestionWindowPlot();
     }
 }
