@@ -22,7 +22,7 @@ public class TCPSocketImpl extends TCPSocket {
     private List<TCPPacket> sendpkt = new ArrayList<TCPPacket>();
     private int numdup = 1;
     private int MSS = 10;
-    private int ocwnd = 0;
+    private long ocwnd = 0;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
@@ -186,31 +186,19 @@ public class TCPSocketImpl extends TCPSocket {
         int numofchunk = 0;
         int duporpar = 0;
 //        long chunks = file.length()/udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
-        boolean is_file_read = false;
-        while(!is_file_read) {
+        while(f.read(chunk)>0) {
             if(duporpar == 0) {
-                // slow start
                 numofchunk++;
-                for (int i = SENDBASE; i < windowSize; i++) {
-                    if(i NOT_SENT) {
-
-                        if(f.read(chunk) > 0) {
-                            TCPPacket tcpp = new TCPPacket(chunk);
-                            tcpp.setSeqNumber(numofchunk);
-                            sendpkt.add(tcpp);
-                            byte[] bufsnd = tcpp.toStream();
-                            sendPacket(tcpp);
-//                            tmp.add(bufsnd);
-                            arrays.add(bufsnd);
-//                            this.resendwindow(tmp);
-//                            tmp.clear();
-                        } else{
-                            is_file_read = true;
-                        }
-                    }
-                }
+                TCPPacket tcpp = new TCPPacket(chunk);
+                tcpp.setSeqNumber(numofchunk);
+                sendpkt.add(tcpp);
+                byte[] bufsnd = tcpp.toStream();
+                tmp.add(bufsnd);
+                arrays.add(bufsnd);
+                this.resendwindow(tmp);
+                tmp.clear();
             }
-            if(arrays.size() >= 5 || duporpar == -1){//this.getwindowsize()????
+            if(arrays.size()>=5 || duporpar == -1){//this.getwindowsize()????
                 duporpar = this.gobackN(arrays);
                 arrays.remove(0);//should check seq#?:/
             }
