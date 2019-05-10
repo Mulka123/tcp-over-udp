@@ -1,7 +1,4 @@
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 
 class TCPPacket implements Serializable {
@@ -26,7 +23,9 @@ class TCPPacket implements Serializable {
         this.rwnd = rwnd;
     }
 
-    public int getRwndSize() { return rwnd; }
+    int getRwndSize() {
+        return rwnd;
+    }
 
     static void saveToFile(ArrayList<TCPPacket> packets, String pathToFile) throws IOException {
         new File(pathToFile).delete();
@@ -40,11 +39,17 @@ class TCPPacket implements Serializable {
         this.payload = payload;
     }
 
-    void setAckNumber(int ackNumber) { this.ackNumber = ackNumber; }
+    void setAckNumber(int ackNumber) {
+        this.ackNumber = ackNumber;
+    }
 
-    int getAckNumber() { return ackNumber; }
+    int getAckNumber() {
+        return ackNumber;
+    }
 
-    void setSeqNumber(int seqNumber) { this.seqNumber = seqNumber; }
+    void setSeqNumber(int seqNumber) {
+        this.seqNumber = seqNumber;
+    }
 
     TCPPacket(boolean SYN, boolean ACK) {
         this.SYN = SYN;
@@ -52,19 +57,35 @@ class TCPPacket implements Serializable {
         payload = new byte[0];
     }
 
-    public static int overHeadSize() { return 138; }
+    static int overHeadSize() {
+        return 138;
+    }
 
-    boolean isLastPacket() { return PSH; }
+    boolean isLastPacket() {
+        return PSH;
+    }
 
-    int getSeqNum() { return seqNumber; }
+    int getSeqNum() {
+        return seqNumber;
+    }
 
-    private byte[] getData() { return payload; }
+    private byte[] getData() {
+        return payload;
+    }
 
-    boolean isACK() { return ACK; }
-    boolean isSYN() { return SYN; }
-    boolean isSYN_ACK() { return SYN && ACK; }
+    boolean isACK() {
+        return ACK;
+    }
 
-    byte[] toStream(){
+    boolean isSYN() {
+        return SYN;
+    }
+
+    boolean isSYN_ACK() {
+        return SYN && ACK;
+    }
+
+    byte[] toStream() {
         byte[] stream = null;
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
             ObjectOutput out = new ObjectOutputStream(bos);
@@ -84,23 +105,18 @@ class TCPPacket implements Serializable {
              ObjectInputStream ois = new ObjectInputStream(bais)) {
             stu = (TCPPacket) ois.readObject();
         } catch (IOException | ClassNotFoundException e) {
-            // Error in de-serialization
             e.printStackTrace();
-        } // You are converting an invalid stream to TCPPacket
+        }
 
         return stu;
+    }
+
+    void setAsLastSegment() {
+        PSH = true;
     }
 
     @Override
     public String toString() {
         return Integer.toString(seqNumber);
     }
-
-    public void setAsLastSegment() {
-        PSH = true;
-    }
-
-    //    public static TCPPacket toACKPacket(int ackNumber) {
-//        return new TCPPacket(ackNumber);
-//    }
 }

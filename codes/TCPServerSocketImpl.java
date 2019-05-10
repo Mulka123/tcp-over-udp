@@ -4,45 +4,46 @@ import java.net.SocketTimeoutException;
 
 public class TCPServerSocketImpl extends TCPServerSocket {
     private static final int MAX_PAYLOAD_SIZE = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
-    private EnhancedDatagramSocket udp_socket;
+    private EnhancedDatagramSocket udpSocket;
     private InetAddress address = InetAddress.getByName("127.0.0.1");
-    private int peer_port;
+    private int peerPort;
     private int port;
     private TCPState state;
+
     public TCPServerSocketImpl(int port) throws Exception {
         super(port);
         this.port = port;
-        this.peer_port = 0;
+        this.peerPort = 0;
         state = TCPState.CLOSED;
     }
 
     private TCPPacket receivePacket() throws Exception {
         byte[] buf = new byte[MAX_PAYLOAD_SIZE];
-        DatagramPacket recv_dp = new DatagramPacket(buf, buf.length);
-        udp_socket.receive(recv_dp);
-        if(peer_port == 0)
-            peer_port = recv_dp.getPort();
-        System.out.println("PEER PORT IS " + peer_port);
-        return TCPPacket.toTCPPacket(recv_dp.getData());
+        DatagramPacket recvDp = new DatagramPacket(buf, buf.length);
+        udpSocket.receive(recvDp);
+        if (peerPort == 0)
+            peerPort = recvDp.getPort();
+        System.out.println("PEER PORT IS " + peerPort);
+        return TCPPacket.toTCPPacket(recvDp.getData());
     }
 
     @Override
     public TCPSocket accept() throws Exception {
-        if(state != TCPState.CLOSED) return null;
+        if (state != TCPState.CLOSED) return null;
 
         state = TCPState.LISTEN;
-        int my_seq_number = Utils.randomInRange(50, 200); //havijoori :\
-        int my_ack_number = 0;
-        udp_socket = new EnhancedDatagramSocket(port);
-        udp_socket.setSoTimeout(10);
+        int mySeqNumber = -1;
+        int myAckNumber = 0;
+        udpSocket = new EnhancedDatagramSocket(port);
+        udpSocket.setSoTimeout(10);
 
-        boolean syn_received = false;
-        while(!syn_received) {
+        boolean synReceived = false;
+        while (!synReceived) {
             try {
-                TCPPacket recv_pkt = receivePacket();
-                my_ack_number = recv_pkt.getSeqNum() + 1;
-                if(recv_pkt.isSYN()){
-                    syn_received = true;
+                TCPPacket recvPkt = receivePacket();
+                myAckNumber = recvPkt.getSeqNum() + 1;
+                if (recvPkt.isSYN()) {
+                    synReceived = true;
                 }
             } catch (SocketTimeoutException e) {
                 System.out.println("TIMEOUT");
@@ -51,22 +52,22 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         state = TCPState.SYN_RECEIVED;
 
         // send SYN-ACK and expect ACK
-        boolean ack_received = false;
+        boolean ackReceived = false;
 
         TCPPacket packet = new TCPPacket(true, true);
-        packet.setSeqNumber(my_seq_number++);
-        packet.setAckNumber(my_ack_number);
-        while(!ack_received) {
+        packet.setSeqNumber(mySeqNumber++);
+        packet.setAckNumber(myAckNumber);
+        while (!ackReceived) {
             sendPacket(packet);
 
             try {
-                TCPPacket recv_pkt = receivePacket();
-                if(recv_pkt.getAckNumber() != my_seq_number){
+                TCPPacket recvPkt = receivePacket();
+                if (recvPkt.getAckNumber() != mySeqNumber) {
                     System.out.println("BAD PACKET IN SV :|");
                     //TODO: what now?
                 }
-                if(recv_pkt.isACK()){
-                    ack_received = true;
+                if (recvPkt.isACK()) {
+                    ackReceived = true;
                 }
             } catch (SocketTimeoutException e) {
                 //TODO: increment a variable to prevent sticking in while?
@@ -76,20 +77,20 @@ public class TCPServerSocketImpl extends TCPServerSocket {
 
         state = TCPState.ESTABLISHED;
         System.out.println("Server Established.");
-        TCPSocketImpl ret = new TCPSocketImpl("127.0.0.1", peer_port);
-        ret.setUdpSocket(udp_socket); //TODO: is correct?
-        ret.setSeqNum(my_seq_number);
+        TCPSocketImpl ret = new TCPSocketImpl("127.0.0.1", peerPort);
+        ret.setUdpSocket(udpSocket); //TODO: is correct?
+        ret.setSeqNum(mySeqNumber);
         return ret;
     }
 
     private void sendPacket(TCPPacket packet) throws Exception {
         byte[] buf = packet.toStream();
-        DatagramPacket dp = new DatagramPacket(buf, buf.length, address, peer_port);
-        udp_socket.send(dp);
+        DatagramPacket dp = new DatagramPacket(buf, buf.length, address, peerPort);
+        udpSocket.send(dp);
     }
 
     @Override
     public void close() {
-        //TODO: what to do with udp_socket? :|
+        //TODO: what to do with udpSocket? :|
     }
 }

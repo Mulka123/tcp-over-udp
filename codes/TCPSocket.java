@@ -1,18 +1,12 @@
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 
 public abstract class TCPSocket implements CongestionWindowPlotter {
-    protected int port; // my port
-    protected int peer_port; // peer port
+    int port; // my port
+    int peerPort; // peer port
 
-    public TCPSocket(String ip, int port) throws Exception {
+    TCPSocket(String ip, int port) throws Exception {
         this.port = port;
     }
 
