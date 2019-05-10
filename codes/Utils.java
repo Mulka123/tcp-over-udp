@@ -28,8 +28,12 @@ public class Utils {
     }
 
     public static void addIfNotExists(ArrayList<TCPPacket> receive_buffer, TCPPacket recv_pkt) {
-        if(!receive_buffer.contains(recv_pkt)) { //check with sequence number?
-            receive_buffer.add(recv_pkt);
-        }
+        for (TCPPacket packet: receive_buffer)
+            if(packet.getSeqNum() == recv_pkt.getSeqNum()) return;
+        receive_buffer.add(recv_pkt);
+    }
+
+    public static long toInt(double num) {
+        return (int)Math.floor(num);
     }
 }

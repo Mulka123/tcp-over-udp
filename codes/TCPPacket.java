@@ -50,7 +50,10 @@ class TCPPacket implements Serializable {
     TCPPacket(boolean SYN, boolean ACK) {
         this.SYN = SYN;
         this.ACK = ACK;
+        payload = new byte[0];
     }
+
+    public static int overHeadSize() { return 138; }
 
     boolean isLastPacket() { return PSH; }
 
@@ -89,7 +92,16 @@ class TCPPacket implements Serializable {
         return stu;
     }
 
-//    public static TCPPacket toACKPacket(int ackNumber) {
+    @Override
+    public String toString() {
+        return new String(payload);
+    }
+
+    public void setAsLastSegment() {
+        PSH = true;
+    }
+
+    //    public static TCPPacket toACKPacket(int ackNumber) {
 //        return new TCPPacket(ackNumber);
 //    }
 }
