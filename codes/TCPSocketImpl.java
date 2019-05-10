@@ -11,7 +11,7 @@ public class TCPSocketImpl extends TCPSocket {
     private EnhancedDatagramSocket udp_socket;
     private TCPState state;
     private CongestionControlState congestionState;
-    private long windowSize;
+    private double windowSize;
     private long SSThreshold;
     private int my_next_sequence_number;
     private int my_last_ack_number;
@@ -20,7 +20,6 @@ public class TCPSocketImpl extends TCPSocket {
     private List<TCPPacket> dups = new ArrayList<TCPPacket>();
     private List<TCPPacket> received = new ArrayList<TCPPacket>();
     private List<TCPPacket> sendpkt = new ArrayList<TCPPacket>();
-    int numdup = 1;
 
 
     public TCPSocketImpl(String ip, int port) throws Exception {
@@ -126,94 +125,191 @@ public class TCPSocketImpl extends TCPSocket {
         return null;
     }
 
-    private int gobackN(List<byte[]> arrays) throws Exception{
-        TCPPacket recvpkt;
-        while(true){
-            try{
-                recvpkt = this.receivePacket();
-
-                if(received.size() == 0 || recvpkt.getAckNumber() > received.get(received.size()-1).getAckNumber()){
-                    received.add(recvpkt);
-                }
-                else if(recvpkt.getAckNumber() == received.get(received.size()-1).getAckNumber()){
-                    numdup++;
-                    if(numdup == 3) {
-
-                        windowSize /= 2;
-                        congestionState = CongestionControlState.FASTRECOVERY;
-
-                        TCPPacket losspkt = findinchunks(recvpkt.getAckNumber());
-                        this.sendPacket(losspkt);
-                        numdup = 0;
-                        return 0;
-                    }
-                    return -1;
-                }
-                return 0;
-            }
-            catch(SocketTimeoutException sktexp){
-
-                SSThreshold = windowSize / 2;
-                windowSize = 1;
-                congestionState = CongestionControlState.SLOWSTART;
-
-//                byte[] first_pkt = arrays.get(0);
-//                arrays.clear();
-//                sendPacket(new TCPPacket(first_pkt));
-//                arrays.add(first_pkt);
-//                this.resendwindow(arrays);
-           //     System.out.println("go back");
-            }
-        }    
-    }
+//    private int gobackN(List<byte[]> arrays) throws Exception{
+//        TCPPacket recvpkt;
+//        while(true){
+//            try{
+//                recvpkt = this.receivePacket();
+//
+//                if(received.size() == 0 || recvpkt.getAckNumber() > received.get(received.size()-1).getAckNumber()){
+//                    received.add(recvpkt);
+//                }
+//                else if(recvpkt.getAckNumber() == received.get(received.size()-1).getAckNumber()){
+//                    numdup++;
+//                    if(numdup == 3) {
+//
+//                        windowSize /= 2;
+//                        congestionState = CongestionControlState.FASTRECOVERY;
+//
+//                        TCPPacket losspkt = findinchunks(recvpkt.getAckNumber());
+//                        this.sendPacket(losspkt);
+//                        numdup = 0;
+//                        return 0;
+//                    }
+//                    return -1;
+//                }
+//                return 0;
+//            }
+//            catch(SocketTimeoutException sktexp){
+//
+//                SSThreshold = Utils.toInt(windowSize / 2);
+//                windowSize = 1;
+//                congestionState = CongestionControlState.SLOWSTART;
+//
+////                byte[] first_pkt = arrays.get(0);
+////                arrays.clear();
+////                sendPacket(new TCPPacket(first_pkt));
+////                arrays.add(first_pkt);
+////                this.resendwindow(arrays);
+//           //     System.out.println("go back");
+//            }
+//        }
+//    }
 
     private int sendpacketchunkbychunk(String pathToFile) throws Exception {
         File file = new File(pathToFile);
         FileInputStream f = new FileInputStream(file);        
         byte[] chunk = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
         List<byte[]> arrays = new ArrayList<>();
-        List<byte[]> tmp = new ArrayList<>();
-        int numofchunk = 0;
+        ArrayList<TCPPacket> window = new ArrayList<>();
+        int EFS = 0;
+        int highWater = 0;
+        int last_ack = -1;
+        int lastSentChunkNum = -1;
         int duporpar = 0;
-//        long chunks = file.length()/udp_socket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
-        boolean is_file_read = false;
-        while(!is_file_read) {
-            if(duporpar == 0) {
-                // slow start
-                numofchunk++;
-                for (int i = SENDBASE; i < windowSize; i++) {
-                    if(i NOT_SENT) {
+        int lastPacketSent;
+        int lastPacketACKed;
+        int recover = lastSentChunkNum;
+        CongestionControlState lastState = CongestionControlState.SLOWSTART;
+        int numdup = 0;
 
-                        if(f.read(chunk) > 0) {
-                            TCPPacket tcpp = new TCPPacket(chunk);
-                            tcpp.setSeqNumber(numofchunk);
-                            sendpkt.add(tcpp);
-                            byte[] bufsnd = tcpp.toStream();
-                            sendPacket(tcpp);
-//                            tmp.add(bufsnd);
-                            arrays.add(bufsnd);
-//                            this.resendwindow(tmp);
-//                            tmp.clear();
-                        } else{
-                            is_file_read = true;
-                        }
-                    }
+        boolean is_file_read = false;
+        while(!is_file_read) { //TODO: check for last ack?
+
+            // SENDING PART
+//            for (int i = EFS; i < windowSize; i++) {
+            while(lastSentChunkNum - last_ack < windowSize) {
+
+                if(congestionState == CongestionControlState.FASTRECOVERY) {
+                    if(EFS >= windowSize) break;
+                } else {
+                    if(lastSentChunkNum - last_ack >= windowSize) break;
                 }
 
+                if(f.read(chunk) > 0) {
+//                    if(numdup != 0 && )
+//                        break;
+                    TCPPacket tcpp = new TCPPacket(chunk);
+                    tcpp.setSeqNumber(++lastSentChunkNum);
+
+                    window.add(tcpp);
+                    sendpkt.add(tcpp);
+
+                    sendPacket(tcpp);
+                    EFS++;
+                } else {
+                    is_file_read = true;
+                }
             }
-            if(arrays.size() >= 5 || duporpar == -1){//this.getwindowsize()????
-                duporpar = this.gobackN(arrays);
-                arrays.remove(0);//should check seq#?:/
+
+
+
+            // RECEIVING PART
+            boolean shouldRetransmit = false;
+
+            try {
+                TCPPacket recvpkt = receivePacket();
+
+                CongestionControlState nextState = congestionState;
+                boolean isDup = false;
+                int rwnd = recvpkt.getRwndSize();
+                int ackNumber = recvpkt.getAckNumber();
+
+                EFS--;
+
+                // CHECK FOR DUPLICATE ACK
+                if (ackNumber == last_ack) {
+                    isDup = true;
+                    numdup++;
+                    if (numdup == 3) {
+                        EFS--;
+
+                        if (congestionState != CongestionControlState.FASTRECOVERY) {
+                            numdup = 0;
+                            highWater = lastSentChunkNum;
+                            SSThreshold = Math.max(Utils.toInt(windowSize / 2), 2);
+//                            windowSize = SSThreshold + 3;
+                            windowSize = SSThreshold;
+                            nextState = CongestionControlState.FASTRECOVERY;
+                        }
+
+                    }
+                } else numdup = 0;
+
+
+
+                // CHANGE STATE, WINDOW SIZE AND SSTHRESHOLD
+                switch (congestionState) {
+                    case SLOWSTART:
+                        if(!isDup){
+                            windowSize++;
+                            if (windowSize > SSThreshold)
+                                nextState = CongestionControlState.CONGESTIONAVOIDANCE;
+                        }
+                        break;
+                    case CONGESTIONAVOIDANCE:
+                        if(!isDup) {
+                            windowSize += 1 / windowSize;
+                        }
+                        break;
+                    case FASTRECOVERY:
+                        if(!isDup) {
+                            if(ackNumber >= highWater) {
+                                windowSize = SSThreshold;
+                                nextState = CongestionControlState.CONGESTIONAVOIDANCE;
+                            } else {
+                                windowSize -= ackNumber - last_ack + 1; // num of data acked by this ack
+                                shouldRetransmit = true;
+                            }
+                        } else {
+                            windowSize++;
+                        }
+                        break;
+                }
+
+                // UPDATE LAST ACKNOWLEDGED PACKET
+                if(ackNumber > last_ack) {
+                    last_ack = ackNumber;
+                    while (window.size() > 0 && window.get(0).getSeqNum() <= last_ack)
+                        window.remove(0);
+                }
+
+                congestionState = nextState;
+
+                windowSize = Math.min(windowSize, rwnd);
+
+            } catch (SocketTimeoutException e) {
+
+                SSThreshold = Math.max(Utils.toInt(windowSize / 2), 2);
+                windowSize = 1;
+                congestionState = CongestionControlState.SLOWSTART;
+                shouldRetransmit = true;
+            }
+
+            // RETRANSMIT LOST SEGMENT
+            if(shouldRetransmit) {
+                TCPPacket pkt = sendpkt.get(last_ack + 1);
+                sendPacket(pkt);
             }
         }
-        return numofchunk;
+        return lastSentChunkNum;
     }
 
     @Override
     public void send(String pathToFile) throws Exception {
         congestionState = CongestionControlState.SLOWSTART;
         SSThreshold = Integer.MAX_VALUE;
-        windowSize = 1;
+        windowSize = 12;
         int numofchunk = sendpacketchunkbychunk(pathToFile);//numofchunk shaiad niaz shod :/
     }
     
@@ -291,6 +387,6 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public long getWindowSize() {
-        return windowSize;
+        return (long)windowSize;
     }
 }

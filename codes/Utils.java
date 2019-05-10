@@ -32,4 +32,8 @@ public class Utils {
             receive_buffer.add(recv_pkt);
         }
     }
+
+    public static long toInt(double num) {
+        return (int)Math.floor(num);
+    }
 }
