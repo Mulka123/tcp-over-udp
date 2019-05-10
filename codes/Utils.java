@@ -16,10 +16,10 @@ class Utils {
         return subList;
     }
 
-    static void addIfNotExists(ArrayList<TCPPacket> receive_buffer, TCPPacket recv_pkt) {
-        for (TCPPacket packet : receive_buffer)
-            if (packet.getSeqNum() == recv_pkt.getSeqNum()) return;
-        receive_buffer.add(recv_pkt);
+    static void addIfNotExists(ArrayList<TCPPacket> arr, TCPPacket pkt) {
+        for (TCPPacket packet : arr)
+            if (packet.getSeqNum() == pkt.getSeqNum()) return;
+        arr.add(pkt);
     }
 
     static long toInt(double num) {
