@@ -29,11 +29,10 @@ class TCPPacket implements Serializable {
     public int getRwndSize() { return rwnd; }
 
     static void saveToFile(ArrayList<TCPPacket> packets, String pathToFile) throws IOException {
-
-        for (TCPPacket packet : packets) {
-            Files.write(Paths.get(pathToFile),
-                    packet.getData(), //encode, decode?
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        new File(pathToFile).delete();
+        try (FileOutputStream fos = new FileOutputStream(pathToFile)) {
+            for (TCPPacket packet : packets)
+                fos.write(packet.getData());
         }
     }
 
@@ -94,7 +93,7 @@ class TCPPacket implements Serializable {
 
     @Override
     public String toString() {
-        return new String(payload);
+        return Integer.toString(seqNumber);
     }
 
     public void setAsLastSegment() {

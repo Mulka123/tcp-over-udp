@@ -4,15 +4,16 @@ import java.net.SocketTimeoutException;
 
 public class TCPServerSocketImpl extends TCPServerSocket {
     private static final int MAX_PAYLOAD_SIZE = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
-    EnhancedDatagramSocket udp_socket;
-    InetAddress address = InetAddress.getByName("127.0.0.1");
-    int peer_port;
-    int port;
+    private EnhancedDatagramSocket udp_socket;
+    private InetAddress address = InetAddress.getByName("127.0.0.1");
+    private int peer_port;
+    private int port;
     private TCPState state;
     public TCPServerSocketImpl(int port) throws Exception {
         super(port);
         this.port = port;
         this.peer_port = 0;
+        state = TCPState.CLOSED;
     }
 
     private TCPPacket receivePacket() throws Exception {
@@ -27,11 +28,13 @@ public class TCPServerSocketImpl extends TCPServerSocket {
 
     @Override
     public TCPSocket accept() throws Exception {
+        if(state != TCPState.CLOSED) return null;
+
         state = TCPState.LISTEN;
         int my_seq_number = Utils.randomInRange(50, 200); //havijoori :\
         int my_ack_number = 0;
         udp_socket = new EnhancedDatagramSocket(port);
-        udp_socket.setSoTimeout(1000); //TODO: ?
+        udp_socket.setSoTimeout(10);
 
         boolean syn_received = false;
         while(!syn_received) {
@@ -43,7 +46,6 @@ public class TCPServerSocketImpl extends TCPServerSocket {
                 }
             } catch (SocketTimeoutException e) {
                 System.out.println("TIMEOUT");
-                continue;
             }
         }
         state = TCPState.SYN_RECEIVED;
@@ -87,7 +89,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
     }
 
     @Override
-    public void close() throws Exception {
-        //TODO: what to do with udp_socket
+    public void close() {
+        //TODO: what to do with udp_socket? :|
     }
 }

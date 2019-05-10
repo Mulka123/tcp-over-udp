@@ -1,4 +1,3 @@
-import java.lang.reflect.Array;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
@@ -14,8 +13,6 @@ public class TCPSocketImpl extends TCPSocket {
     private double windowSize;
     private long SSThreshold;
     private int my_next_sequence_number;
-    private int my_last_ack_number;
-    private int expected_sequence_number;
     private InetAddress address;
     private List<TCPPacket> sendpkt = new ArrayList<>();
 
@@ -29,17 +26,16 @@ public class TCPSocketImpl extends TCPSocket {
 
     void setSeqNum(int seqNum) { my_next_sequence_number = seqNum; }
 
-    void setAckNum(int ackNum) { my_last_ack_number = ackNum; }
-
     void setUdpSocket(EnhancedDatagramSocket sock) {
         this.udp_socket = sock;
     }
 
     @Override
     public void connect() throws Exception {
-        //TODO: check for state! don't connect if already connected
-        udp_socket = new EnhancedDatagramSocket(port); //TODO: how to choose port?
-        udp_socket.setSoTimeout(5000); //TODO: how to set timeout?
+        if (state != TCPState.CLOSED) return;
+
+        udp_socket = new EnhancedDatagramSocket(port);
+        udp_socket.setSoTimeout(50);
 
         my_next_sequence_number = Utils.randomInRange(50, 200); //havijoori :\
 
@@ -59,14 +55,13 @@ public class TCPSocketImpl extends TCPSocket {
                 synack_ack_num = recv_pkt.getAckNumber();
                 if(synack_ack_num != my_next_sequence_number) {
                     System.out.println("BAD PACKET :|");
-                    //TODO: what now?
+                    //what now?
                 }
                 if(recv_pkt.isSYN_ACK())
                     syn_ack_received = true;
             } catch (SocketTimeoutException e) {
                 //TODO: limite maximum try? ye counter bezarim vase datagramSocketemon ke tedade try hasho beshmare
                 // age ziad shod kolan timeout bede nasaze socketo?
-                continue;
             }
         }
 
@@ -77,10 +72,7 @@ public class TCPSocketImpl extends TCPSocket {
         while(true) { //TODO: chejori az send shodane ACK mitonim motmaen shim?
             sendPacket(packet);
             try {
-                TCPPacket recv_pkt = receivePacket();
-                if(recv_pkt.isSYN_ACK()){
-                    continue;
-                }
+                receivePacket();
             } catch (SocketTimeoutException e) {
                 break;
             }
@@ -103,7 +95,7 @@ public class TCPSocketImpl extends TCPSocket {
         udp_socket.send(dp);
     }
 
-    private int sendpacketchunkbychunk(String pathToFile) throws Exception {
+    private void sendpacketchunkbychunk(String pathToFile) throws Exception {
         File file = new File(pathToFile);
         FileInputStream f = new FileInputStream(file);        
         ArrayList<TCPPacket> window = new ArrayList<>();
@@ -126,6 +118,7 @@ public class TCPSocketImpl extends TCPSocket {
                 } else {
                     if(lastSentChunkNum - last_ack >= windowSize) break;
                 }
+
                 byte[] chunk = new byte[chunkSize];
                 if(f.read(chunk) > 0) {
                     TCPPacket tcpp = new TCPPacket(chunk);
@@ -141,7 +134,6 @@ public class TCPSocketImpl extends TCPSocket {
                     sendpkt.add(tcpp);
 
                     sendPacket(tcpp);
-                    System.out.println("READ FROM FILE: " + new String(chunk));
                     System.out.println("SENT PACKET " + tcpp.getSeqNum());
                     EFS++;
                 } else {
@@ -152,7 +144,8 @@ public class TCPSocketImpl extends TCPSocket {
             }
             System.out.println("-----------------");
 
-
+            System.out.println("IS FILE READ: " + is_file_read);
+            System.out.println("LAST PACKET: " + lastPacketSeqNum);
 
             // RECEIVING PART
             boolean shouldRetransmit = false;
@@ -195,6 +188,7 @@ public class TCPSocketImpl extends TCPSocket {
                     case SLOWSTART:
                         if(!isDup){
                             windowSize++;
+                            onWindowChange();
                             if (windowSize > SSThreshold)
                                 nextState = CongestionControlState.CONGESTIONAVOIDANCE;
                         }
@@ -211,6 +205,7 @@ public class TCPSocketImpl extends TCPSocket {
                                 windowSize = SSThreshold;
                                 nextState = CongestionControlState.CONGESTIONAVOIDANCE;
                             } else {
+                                System.out.println("HEREHEHREHRE");
                                 windowSize -= ackNumber - last_ack + 1; // num of data acked by this ack
                                 shouldRetransmit = true;
                             }
@@ -248,31 +243,33 @@ public class TCPSocketImpl extends TCPSocket {
                 if(pkt.getSeqNum() == lastPacketSeqNum)
                     maxTryForLastSegment--;
                 sendPacket(pkt);
+                EFS++;
             }
         }
-        return lastSentChunkNum;
+        f.close();
     }
 
     @Override
     public void send(String pathToFile) throws Exception {
+        udp_socket.setSoTimeout(5);
         congestionState = CongestionControlState.SLOWSTART;
-        SSThreshold = Integer.MAX_VALUE;
+//        SSThreshold = Integer.MAX_VALUE;
+        SSThreshold = 100;
         windowSize = 1;
-        int numofchunk = sendpacketchunkbychunk(pathToFile);
+        sendpacketchunkbychunk(pathToFile);
     }
     
     @Override
     public void receive(String pathToFile) throws Exception {
         ArrayList<TCPPacket> packets = new ArrayList<>();
-        expected_sequence_number = 0;
-        my_last_ack_number = -1;
+        int expected_sequence_number = 0;
+        int my_last_ack_number = -1;
         ArrayList<TCPPacket> receive_buffer = new ArrayList<>();
         ArrayList<Integer> receivedSeqNums = new ArrayList<>();
         udp_socket.setSoTimeout(Integer.MAX_VALUE);
         while (true) {
             TCPPacket recv_pkt = receivePacket();
             int seqNum = recv_pkt.getSeqNum();
-            System.out.println("RECEIVED PACKET " + recv_pkt.getSeqNum());
 
             if (!receivedSeqNums.contains(seqNum)){
                 Utils.addIfNotExists(receive_buffer, recv_pkt);
@@ -281,29 +278,32 @@ public class TCPSocketImpl extends TCPSocket {
 
 
             receive_buffer.sort(Comparator.comparing(TCPPacket::getSeqNum));
-            System.out.println("RECV BUF: " + receive_buffer);
+
+            System.out.println("RECEIVED PACKET " + recv_pkt.getSeqNum());
             System.out.println("EXPECTING " + expected_sequence_number);
+            System.out.println("FIRST BUFFERED ITEM: " + (receive_buffer.size() == 0 ? null : receive_buffer.get(0).getSeqNum()));
+            System.out.println("RECV BUFFER SIZE: " + receive_buffer.size());
+            System.out.println(receive_buffer);
             int inOrderBufferedItems = Utils.findAllInOrderItems(receive_buffer, expected_sequence_number);
+            System.out.println("IN ORDER ITEMS: " + inOrderBufferedItems);
             if(inOrderBufferedItems > 0) {
                 my_last_ack_number = receive_buffer.get(inOrderBufferedItems-1).getSeqNum();
                 packets.addAll(Utils.extractItemsInRange(receive_buffer, 0, inOrderBufferedItems));
                 expected_sequence_number = my_last_ack_number + 1;
-
-                System.out.println(inOrderBufferedItems);
-                System.out.println(receive_buffer);
-                System.out.println(packets);
-
-                if(recv_pkt.isLastPacket()) //and if we've collected all data before it? and if receive buffer is not empty?
-                    break;
             }
 
             // send ACK
             sendACK(my_last_ack_number, receive_buffer_size - receive_buffer.size());
             System.out.println("SENT ACK " + my_last_ack_number);
+            System.out.println("-------------------------");
+            if(Utils.isLastPacketReceived(packets)){
+                System.out.println("PACKETS RECEIVED: " + packets.size());
+                break;
+            }
         }
 
         packets.sort(Comparator.comparing(TCPPacket::getSeqNum));
-        TCPPacket.saveToFile(packets, "RECEIVED_" + pathToFile);
+        TCPPacket.saveToFile(packets, pathToFile);
     }
 
     private void sendACK(int ack_number, int rwnd) throws Exception {
@@ -312,7 +312,7 @@ public class TCPSocketImpl extends TCPSocket {
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         udp_socket.close();
     }
 
