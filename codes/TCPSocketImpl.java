@@ -109,6 +109,7 @@ public class TCPSocketImpl extends TCPSocket {
         int maxTryForLastSegment = 5;
         int lastSentChunkNum = -1;
         int dupCount = 0;
+        double oldWindowSize = windowSize;
 
         boolean isFileRead = false;
         while (!isFileRead || (lastPacketSeqNum != lastAck && maxTryForLastSegment > 0)) {
@@ -165,6 +166,8 @@ public class TCPSocketImpl extends TCPSocket {
                 int rwnd = recvpkt.getRwndSize();
                 int ackNumber = recvpkt.getAckNumber();
 
+                EFS -= ackNumber - lastAck;
+
                 // CHECK FOR DUPLICATE ACK
                 if (ackNumber == lastAck) {
                     isDup = true;
@@ -189,13 +192,16 @@ public class TCPSocketImpl extends TCPSocket {
                         if (!isDup) {
                             windowSize++;
                             onWindowChange();
-                            if (windowSize > SSThreshold)
+                            if (windowSize > SSThreshold){
                                 nextState = CongestionControlState.CONGESTIONAVOIDANCE;
+                                oldWindowSize = windowSize;
+                            }
                         }
                         break;
                     case CONGESTIONAVOIDANCE:
                         if (!isDup) {
-                            windowSize += (1 / windowSize);
+                            System.out.println("OLD WINDOW SIZE: ");
+                            windowSize += (1 / oldWindowSize);
                             onWindowChange();
                         }
                         break;
@@ -203,25 +209,22 @@ public class TCPSocketImpl extends TCPSocket {
                         if (!isDup) {
                             if (ackNumber >= highWater) {
                                 windowSize = SSThreshold;
+                                oldWindowSize = windowSize;
                                 nextState = CongestionControlState.CONGESTIONAVOIDANCE;
                             } else {
                                 System.out.println("PARTIAL ACK RECEIVED");
                                 windowSize -= ackNumber - lastAck + 1; // num of data acked by this ack
+                                windowSize = Math.min(windowSize, 0);
                                 shouldRetransmit = true;
                             }
-                        } else {
-                            windowSize++;
+                            onWindowChange();
                         }
-                        onWindowChange();
                         break;
                 }
 
                 // UPDATE LAST ACKNOWLEDGED PACKET
                 if (ackNumber > lastAck)
                     lastAck = ackNumber;
-
-
-                EFS -= ackNumber - lastAck + 1;
 
                 congestionState = nextState;
 
@@ -258,7 +261,7 @@ public class TCPSocketImpl extends TCPSocket {
     public void send(String pathToFile) throws Exception {
         udpSocket.setSoTimeout(15);
         congestionState = CongestionControlState.SLOWSTART;
-        SSThreshold = 20;
+        SSThreshold = 30;
         windowSize = 1;
         sendpacketchunkbychunk(pathToFile);
     }
